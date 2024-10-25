@@ -1,5 +1,6 @@
 {% materialization incremental, adapter='clickhouse' %}
 
+  {%- set batch_type = config.get('batch_type') -%}
   {%- set existing_relation = load_cached_relation(this) -%}
   {%- set target_relation = this.incorporate(type='table') -%}
 
@@ -30,15 +31,23 @@
 
   {% if existing_relation is none %}
     -- No existing table, simply create a new one
-    {% call statement('main') %}
+    {% if batch_type == 'sequence' %}
+      {{ clickhouse__batch_sequence_create_table(False, target_relation, sql) }}
+    {% else %}
+      {% call statement('main') %}
         {{ get_create_table_as_sql(False, target_relation, sql) }}
-    {% endcall %}
+      {% endcall %}
+    {% endif %}
 
   {% elif full_refresh_mode %}
     -- Completely replacing the old table, so create a temporary table and then swap it
-    {% call statement('main') %}
+    {% if batch_type == 'sequence' %}
+      {{ clickhouse__batch_sequence_create_table(False, intermediate_relation, sql) }}
+    {% else %}
+      {% call statement('main') %}
         {{ get_create_table_as_sql(False, intermediate_relation, sql) }}
-    {% endcall %}
+      {% endcall %}
+    {% endif %}
     {% set need_swap = true %}
 
   {% elif
