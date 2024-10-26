@@ -209,6 +209,8 @@
 
 
 {% macro clickhouse__incremental_delete_insert(existing_relation, unique_key, incremental_predicates, is_distributed=False) %}
+    {%- set batch_type = config.get('batch_type') -%}
+
     {% set new_data_relation = existing_relation.incorporate(path={"identifier": existing_relation.identifier
        + '__dbt_new_data_' + invocation_id.replace('-', '_')}) %}
     {{ drop_relation_if_exists(new_data_relation) }}
@@ -224,9 +226,13 @@
       {%- set inserting_relation = distributed_new_data_relation -%}
       {{ create_distributed_local_table(distributed_new_data_relation, new_data_relation, existing_relation, sql) }}
     {% else %}
-      {% call statement('main') %}
-        {{ get_create_table_as_sql(False, new_data_relation, sql) }}
-      {% endcall %}
+      {% if batch_type == 'sequence' %}
+        {{ clickhouse__batch_sequence_create_table(False, new_data_relation, sql) }}
+      {% else %}
+        {% call statement('main') %}
+          {{ get_create_table_as_sql(False, new_data_relation, sql) }}
+        {% endcall %}
+      {% endif %}
     {% endif %}
 
     {% call statement('delete_existing_data') %}
