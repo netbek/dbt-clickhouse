@@ -23,7 +23,7 @@
 
   -- commit each batch as a separate transaction
   {% for offset in range(num_batches) -%}
-    {%- set msg = "Loading batch " ~ (offset + 1) ~ " of " ~ (num_batches) -%}
+    {%- set msg = "Processing batch " ~ (offset + 1) ~ " of " ~ (num_batches) -%}
     {{ print(msg) }}
 
     {%- set filtered_sql = clickhouse__get_batch_sequence_sql(sql, batch_filter, batch_column, batch_size, range_min, range_max, offset) -%}
