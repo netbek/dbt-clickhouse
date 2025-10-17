@@ -1,5 +1,6 @@
 {% materialization incremental, adapter='clickhouse' %}
 
+  {%- set batch_type = config.get('batch_type') -%}
   {%- set existing_relation = load_cached_relation(this) -%}
   {%- set target_relation = this.incorporate(type='table') -%}
 
@@ -30,15 +31,23 @@
 
   {% if existing_relation is none %}
     -- No existing table, simply create a new one
-    {% call statement('main') %}
+    {% if batch_type == 'sequence' %}
+      {{ clickhouse__batch_sequence_create_table(False, target_relation, sql) }}
+    {% else %}
+      {% call statement('main') %}
         {{ get_create_table_as_sql(False, target_relation, sql) }}
-    {% endcall %}
+      {% endcall %}
+    {% endif %}
 
   {% elif full_refresh_mode %}
     -- Completely replacing the old table, so create a temporary table and then swap it
-    {% call statement('main') %}
+    {% if batch_type == 'sequence' %}
+      {{ clickhouse__batch_sequence_create_table(False, intermediate_relation, sql) }}
+    {% else %}
+      {% call statement('main') %}
         {{ get_create_table_as_sql(False, intermediate_relation, sql) }}
-    {% endcall %}
+      {% endcall %}
+    {% endif %}
     {% set need_swap = true %}
 
   {% elif
@@ -200,6 +209,7 @@
 
 
 {% macro clickhouse__incremental_delete_insert(existing_relation, unique_key, incremental_predicates, is_distributed=False) %}
+    {%- set batch_type = config.get('batch_type') -%}
     {% set new_data_relation = existing_relation.incorporate(path={"identifier": existing_relation.identifier
        + '__dbt_new_data_' + invocation_id.replace('-', '_')}) %}
     {{ drop_relation_if_exists(new_data_relation) }}
@@ -215,9 +225,13 @@
       {%- set inserting_relation = distributed_new_data_relation -%}
       {{ create_distributed_local_table(distributed_new_data_relation, new_data_relation, existing_relation, sql) }}
     {% else %}
-      {% call statement('main') %}
-        {{ get_create_table_as_sql(False, new_data_relation, sql) }}
-      {% endcall %}
+      {% if batch_type == 'sequence' %}
+        {{ clickhouse__batch_sequence_create_table(False, new_data_relation, sql) }}
+      {% else %}
+        {% call statement('main') %}
+          {{ get_create_table_as_sql(False, new_data_relation, sql) }}
+        {% endcall %}
+      {% endif %}
     {% endif %}
 
     {% call statement('delete_existing_data') %}
